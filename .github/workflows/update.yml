@@ -1,0 +1,35 @@
+# Checks CISA's Known Exploited Vulnerabilities list every 30 minutes and commits
+# kev-recent.json only when it changed. GitHub Pages then serves it to Patch Radar:
+# https://bikrambhujel.github.io/patch-radar-data/kev-recent.json
+name: Update CISA KEV
+on:
+  schedule:
+    - cron: "7,37 * * * *"   # every 30 minutes (GitHub may start scheduled runs a few minutes late)
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: update-kev
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch and trim the list
+        run: python scripts/build.py
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- kev-recent.json first-seen.json; then
+            echo "No change from CISA."
+            exit 0
+          fi
+          git config user.name "patch-radar-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add kev-recent.json first-seen.json
+          git commit -m "CISA KEV $(python -c 'import json;print(json.load(open("kev-recent.json"))["catalogVersion"])')"
+          git push
